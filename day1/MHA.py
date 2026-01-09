@@ -3,7 +3,38 @@ import torch.nn as nn
 import torch.nn.functional as F
 from dataclasses import dataclass
 
-# 1. 使用 Dataclass 管理配置 (大厂标配)
+class MHA(nn.Module):
+    def __init__(self, embed_dim: int, num_heads: int):
+        super().__init__()
+        assert embed_dim % num_heads == 0, "embed_dim must be divisible by num_heads"
+        self.num_heads = num_heads
+        self.head_dim = embed_dim // num_heads
+        self.q_proj = nn.Linear(embed_dim, embed_dim)
+        self.k_proj = nn.Linear(embed_dim, embed_dim)
+        self.v_proj = nn.Linear(embed_dim, embed_dim)
+        self.out_proj = nn.Linear(embed_dim, embed_dim)
+
+    def forward(self, x):
+        # x: [B, T, D]
+        B, T, D = x.shape
+        q = self.q_proj(x)
+        k = self.k_proj(x)
+        v = self.v_proj(x)
+
+        # reshape to [B, heads, T, head_dim]
+        def split_heads(t):
+            return t.view(B, T, self.num_heads, self.head_dim).transpose(1, 2)
+        q, k, v = map(split_heads, (q, k, v))
+
+        # scaled dot-product attention
+        scores = torch.matmul(q, k.transpose(-2, -1)) / (self.head_dim ** 0.5)  # [B, heads, T, T]
+        attn = F.softmax(scores, dim=-1)
+        context = torch.matmul(attn, v)  # [B, heads, T, head_dim]
+
+        # merge heads: [B, T, D]
+        context = context.transpose(1, 2).contiguous().view(B, T, D)
+        return self.out_proj(context)
+
 @dataclass
 class ModelArgs:
     dim: int = 4096
