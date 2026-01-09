@@ -33,6 +33,9 @@ class CausalSelfAttention(nn.Module):
         # register_buffer 用于保存状态（如 Mask），但它不是需要更新梯度的参数
         # 这里的 mask 会随 model.to(device) 自动移动
         mask = torch.tril(torch.ones(args.max_seq_len, args.max_seq_len))
+        # torch.tril 返回一个下三角矩阵，用于 causal mask
+        # 下三角部分为 1，上三角部分为 0
+        # 这确保了在自注意力计算中，每个位置只能 attend 到它之前的位置
         mask = mask.view(1, 1, args.max_seq_len, args.max_seq_len)
         self.register_buffer("bias", mask)
 
@@ -66,7 +69,6 @@ class CausalSelfAttention(nn.Module):
             )
         else:
             # 传统手动实现 (Fallback)
-            # 这里的数学逻辑和你之前写的一样
             att = (q @ k.transpose(-2, -1)) * (1.0 / math.sqrt(k.size(-1)))
             att = att.masked_fill(self.bias[:,:,:T,:T] == 0, float('-inf'))
             att = F.softmax(att, dim=-1)
